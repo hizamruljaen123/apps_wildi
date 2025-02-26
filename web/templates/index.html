@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rekomendasi Laptop</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="static/styles.css">
 </head>
 <body>
     <!-- Sidebar -->
@@ -27,10 +27,10 @@
                 <div class="col-md-4">
                     <div class="card p-4">
                         <h3 class="text-center mb-3">Masukkan Preferensi</h3>
-                        <form method="POST" action="/recommend">
+                        <form id="laptop-form">
                             <div class="mb-3">
                                 <label for="budget" class="form-label fw-bold">Budget Maksimum (juta rupiah)</label>
-                                <input type="number" class="form-control" id="budget" name="budget" step="0.1" required>
+                                <input type="number" class="form-control" id="budget" name="budget" step="0.1" placeholder="Contoh: 15" required>
                             </div>
                             <div class="mb-3">
                                 <label for="job_type" class="form-label fw-bold">Jenis Pekerjaan</label>
@@ -100,38 +100,115 @@
 
                 <!-- Hasil Rekomendasi -->
                 <div class="col-md-8">
-                    <div class="card p-4 result-section">
+                    <div class="card p-4 result-section" id="result-section" >
                         <h3 class="text-center mb-3">Hasil Rekomendasi</h3>
-                        {% if results %}
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>Laptop</th>
-                                    <th>Skor</th>
-                                    <th>Link</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for laptop in results %}
-                                <tr>
-                                    <td>{{ laptop['Laptop'] }}</td>
-                                    <td>{{ laptop['Final_Score']|round(3) }}</td>
-                                    <td><a href="{{ laptop['Link'] }}" target="_blank" class="btn btn-sm btn-outline-primary">Beli</a></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                        {% elif error %}
-                        <div class="alert alert-danger" role="alert">
-                            {{ error }}
+                        <p class="text-muted text-center" id="default-message">Masukkan preferensi untuk melihat rekomendasi.</p>
+                        <div id="loading-screen" style="display: none;" class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Memproses...</span>
+                            </div>
+                            <p class="mt-2">Sedang memproses rekomendasi...</p>
                         </div>
-                        {% else %}
-                        <p class="text-muted text-center">Masukkan preferensi untuk melihat rekomendasi.</p>
-                        {% endif %}
+                        <div id="recommendation-results" style="display: none;"></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- JavaScript -->
+    <script>
+        document.getElementById('laptop-form').addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevent default form submission
+
+            // Show loading screen
+            const loadingScreen = document.getElementById('loading-screen');
+            const defaultMessage = document.getElementById('default-message');
+            const resultSection = document.getElementById('recommendation-results');
+            loadingScreen.style.display = 'block';
+            defaultMessage.style.display = 'none';
+            resultSection.style.display = 'none';
+
+            // Collect form data
+            const formData = new FormData(this);
+            const data = {
+                budget: parseFloat(formData.get('budget')),
+                job_type: formData.get('job_type'),
+                screen_type: formData.get('screen_type'),
+                processor_type: formData.get('processor_type'),
+                min_ram: parseInt(formData.get('min_ram')),
+                min_storage: parseInt(formData.get('min_storage')),
+                screen_size: parseFloat(formData.get('screen_size')),
+                max_weight: parseFloat(formData.get('max_weight')),
+                min_battery: parseInt(formData.get('min_battery')),
+                gpu_type: formData.get('gpu_type')
+            };
+
+            try {
+                // Send POST request to /recommend
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const result = await response.json();
+
+                // Hide loading screen and display results
+                loadingScreen.style.display = 'none';
+                displayRecommendations(result);
+            } catch (error) {
+                console.error('Error:', error);
+                loadingScreen.style.display = 'none';
+                resultSection.innerHTML = '<p class="text-danger text-center">Terjadi kesalahan saat mengambil rekomendasi.</p>';
+                resultSection.style.display = 'block';
+            }
+        });
+
+        function displayRecommendations(data) {
+            const resultSection = document.getElementById('recommendation-results');
+            const defaultMessage = document.getElementById('default-message');
+            resultSection.innerHTML = ''; // Clear previous results
+
+            // Display best laptop
+            const bestLaptop = data.best_laptop;
+            resultSection.innerHTML += `
+                <h5>Laptop Terbaik:</h5>
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">${bestLaptop.nama_produk}</h6>
+                        <p class="card-text">Harga: ${bestLaptop.harga}</p>
+                        <p class="card-text">Sumber: ${bestLaptop.sumber}</p>
+                        <a href="${bestLaptop.link}" target="_blank" class="btn btn-sm btn-outline-primary">Lihat Produk</a>
+                    </div>
+                </div>
+            `;
+
+            // Display other results
+            if (data.results && data.results.length > 0) {
+                resultSection.innerHTML += '<h5>Pilihan Lain:</h5>';
+                data.results.forEach(item => {
+                    resultSection.innerHTML += `
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title">${item.nama_produk}</h6>
+                                <p class="card-text">Harga: ${item.harga}</p>
+                                <p class="card-text">Sumber: ${item.sumber}</p>
+                                <a href="${item.link}" target="_blank" class="btn btn-sm btn-outline-primary">Lihat Produk</a>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Show results and hide default message
+            resultSection.style.display = 'block';
+            defaultMessage.style.display = 'none';
+        }
+    </script>
 </body>
 </html>
